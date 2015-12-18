@@ -1,14 +1,15 @@
 package com.ketalo.play.plugins.emberjs
 
 import java.io._
+import com.typesafe.sbt.web.GeneralProblem
 import org.apache.commons.io.FilenameUtils
-import play.JvmLogger
+import play.sbt.PlayExceptions
 
 import sbt._
-import play.PlayExceptions.AssetCompilationException
+import org.slf4j.LoggerFactory
 
 trait EmberJsTasks extends EmberJsKeys {
-  val logger = new JvmLogger(Some("play-emberjs"))
+  val logger = LoggerFactory.getLogger("play-emberjs")
 
   val modificationTimeCache = scala.collection.mutable.Map.empty[String, Long] // Keeps track of the modification time
 
@@ -93,13 +94,14 @@ trait EmberJsTasks extends EmberJsKeys {
       val cacheFile = cache / "emberjs"
       val templatesDir = resources / "public" / "templates"
       val global = templatesDir / templateFile
-      val globalMinified = templatesDir / s"${FilenameUtils.removeExtension(templateFile)}.min.js"
+//      val globalMinified = templatesDir / s"${FilenameUtils.removeExtension(templateFile)}.min.js"
 
       def naming(name: String) = name.replaceAll(fileReplaceRegexp, fileReplaceWith)
 
       val latestTimestamp = files.get.sortBy(f => FileInfo.lastModified(f).lastModified).reverse.map(f => FileInfo.lastModified(f)).headOption.getOrElse(FileInfo.lastModified(global))
       val currentInfos = files.get.map(f => f -> FileInfo.lastModified(f))
-      val allFiles = (currentInfos ++ Seq(global -> latestTimestamp, globalMinified -> latestTimestamp)).toMap
+//      val allFiles = (currentInfos ++ Seq(global -> latestTimestamp, globalMinified -> latestTimestamp)).toMap
+      val allFiles = (currentInfos ++ Seq(global -> latestTimestamp)).toMap
 
       val (previousRelation, previousInfo) = Sync.readInfo(cacheFile)(FileInfo.lastModified.format)
       val previousGeneratedFiles = previousRelation._2s
@@ -117,10 +119,7 @@ trait EmberJsTasks extends EmberJsKeys {
             val jsSource = if (modificationTimeCache.get(sourceFile.getAbsolutePath).map(time => time != sourceFile.lastModified()).getOrElse(true)) {
               logger.info(s"Compiling $sourceFile not in cache")
               compile(version, template, IO.read(sourceFile)).left.map {
-                case (msg, line, column) => throw AssetCompilationException(Some(sourceFile),
-                  msg,
-                  Some(line),
-                  Some(column))
+                case (msg, line, column) => throw PlayExceptions.CompilationException(new GeneralProblem(msg, sourceFile))
               }.right.get
             } else {
               logger.info(s"Reading $name from the cache")
@@ -139,10 +138,11 @@ trait EmberJsTasks extends EmberJsKeys {
         IO.write(global, output.toString())
 
         // Minify
-        val minified = play.core.jscompile.JavascriptCompiler.minify(output.toString, None)
-        IO.write(globalMinified, minified)
+//        val minified = play.core.jscompile.JavascriptCompiler.minify(output.toString, None)
+//        IO.write(globalMinified, minified)
 
-        val allTemplates = generated ++ Seq(global -> global, globalMinified -> globalMinified)
+        val allTemplates = generated ++ Seq(global -> global)
+//        val allTemplates = generated ++ Seq(global -> global, globalMinified -> globalMinified)
 
         Sync.writeInfo(cacheFile,
           Relation.empty[java.io.File, java.io.File] ++ allTemplates,
